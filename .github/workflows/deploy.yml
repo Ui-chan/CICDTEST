@@ -48,16 +48,26 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
+    # deploy.yml 수정 제안
           script: |
-            # 기존 컨테이너 중지 및 삭제 (실패해도 계속 진행)
+            sudo docker network create my-network || true
+            
+            # 1. DB 컨테이너 실행 (--name에 Secret 사용)
+            sudo docker run -d --name ${{ secrets.DB_HOST }} \
+              --network my-network \
+              -e POSTGRES_USER=${{ secrets.DB_USER }} \
+              -e POSTGRES_PASSWORD=${{ secrets.DB_PASSWORD }} \
+              -e POSTGRES_DB=${{ secrets.DB_NAME }} \
+              -v ~/pgdata:/var/lib/postgresql/data \
+              postgres:15 || true
+            
             sudo docker stop fastapi-app || true
             sudo docker rm fastapi-app || true
             
-            # 최신 이미지 가져오기
-            sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/cicd-test:latest
-            
-            # 환경 변수를 주입하여 컨테이너 실행
+            # 2. App 컨테이너 실행 (주소의 @ 뒷부분에 Secret 사용)
             sudo docker run -d --name fastapi-app \
+              --network my-network \
               -p 8000:8000 \
+              -e DATABASE_URL="postgresql://${{ secrets.DB_USER }}:${{ secrets.DB_PASSWORD }}@${{ secrets.DB_HOST }}:5432/${{ secrets.DB_NAME }}" \
               -e APP_MESSAGE="${{ secrets.APP_MESSAGE }}" \
               ${{ secrets.DOCKERHUB_USERNAME }}/cicd-test:latest
