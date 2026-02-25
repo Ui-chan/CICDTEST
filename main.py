@@ -60,4 +60,4 @@ def read_root(db: Session = Depends(get_db)):
         "secret_message": WELCOME_MSG,
         "total_visits": count,
         "database_type": "PostgreSQL" if "postgresql" in DB_URL else "SQLite"
-    }
+    } 
