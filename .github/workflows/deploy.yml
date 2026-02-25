@@ -1,11 +1,10 @@
-name: Docker CI/CD Pipeline
+name: Docker CI/CD Pipeline v3
 
 on:
   push:
     branches: [ "main" ]
 
 jobs:
-  # 1단계: 테스트 및 도커 이미지 빌드/푸시
   test-and-build:
     runs-on: ubuntu-latest
     steps:
@@ -20,8 +19,9 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: Run Unit Tests (CI)
+      - name: Run Unit Tests (SQLite Mode)
         run: |
+          # DATABASE_URL을 주지 않으므로 main.py에서 SQLite로 테스트함
           pytest test_main.py
 
       - name: Login to Docker Hub
@@ -37,7 +37,6 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/cicd-test:latest
 
-  # 2단계: EC2에 접속하여 컨테이너 실행
   deploy:
     needs: test-and-build
     runs-on: ubuntu-latest
@@ -48,11 +47,11 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
-    # deploy.yml 수정 제안
           script: |
+            # 1. 내부망 구축
             sudo docker network create my-network || true
             
-            # 1. DB 컨테이너 실행 (--name에 Secret 사용)
+            # 2. DB 컨테이너 실행 (볼륨 설정으로 데이터 영구 보존)
             sudo docker run -d --name ${{ secrets.DB_HOST }} \
               --network my-network \
               -e POSTGRES_USER=${{ secrets.DB_USER }} \
@@ -61,10 +60,11 @@ jobs:
               -v ~/pgdata:/var/lib/postgresql/data \
               postgres:15 || true
             
+            # 3. 기존 앱 교체
             sudo docker stop fastapi-app || true
             sudo docker rm fastapi-app || true
             
-            # 2. App 컨테이너 실행 (주소의 @ 뒷부분에 Secret 사용)
+            # 4. 새 앱 컨테이너 실행 (환경 변수 및 DB 주소 주입)
             sudo docker run -d --name fastapi-app \
               --network my-network \
               -p 8000:8000 \

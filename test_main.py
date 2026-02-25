@@ -4,10 +4,17 @@ from main import app
 client = TestClient(app)
 
 def test_read_root():
+    # 1. 요청 보내기
     response = client.get("/")
+    
+    # 2. 상태 코드 확인
     assert response.status_code == 200
     
-    # 메시지 내용이 무엇이든 'message'라는 키가 들어있는지 확인합니다.
+    # 3. 응답 구조 확인 (내용이 아니라 키 값이 존재하는지!)
     data = response.json()
-    assert "message" in data
-    assert len(data["message"]) > 0  # 메시지가 비어있지는 않은지 확인
+    assert "secret_message" in data
+    assert "total_visits" in data
+    assert "database" in data
+    
+    # 4. 방문 횟수가 숫자인지 확인
+    assert isinstance(data["total_visits"], int)

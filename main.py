@@ -1,38 +1,37 @@
 import os
-import time
 from fastapi import FastAPI, Depends
 from sqlalchemy import create_engine, Column, Integer, String
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker, Session, declarative_base
 from sqlalchemy.exc import OperationalError
 
 app = FastAPI()
 
-# 1. 환경 변수 읽기
-# 배포 시 GitHub Secrets에서 주입한 값들을 가져옵니다.
-DB_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/dbname")
-WELCOME_MSG = os.getenv("APP_MESSAGE", "Hello, welcome to my service!")
+# 1. 환경 변수 및 DB URL 설정
+DB_URL = os.getenv("DATABASE_URL")
+WELCOME_MSG = os.getenv("APP_MESSAGE", "Hello, Welcome!")
 
-# 2. DB 연결 설정
-# 실무 Tip: DB가 뜰 때까지 시간이 걸릴 수 있어, 연결 실패 시 재시도 로직을 넣기도 합니다.
-engine = create_engine(DB_URL)
+# 핵심: DATABASE_URL이 없으면(테스트 환경) SQLite를, 있으면(배포 환경) PostgreSQL을 사용
+if not DB_URL:
+    # 테스트용 SQLite (파일 기반)
+    DB_URL = "sqlite:///./test.db"
+    engine = create_engine(DB_URL, connect_args={"check_same_thread": False})
+else:
+    # 운영용 PostgreSQL
+    engine = create_engine(DB_URL)
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# 3. 데이터 모델 정의 (방문 기록 저장용)
+# 2. 데이터 모델 (방문 기록)
 class Visit(Base):
     __tablename__ = "visits"
     id = Column(Integer, primary_key=True, index=True)
     visitor_name = Column(String)
 
-# 서버 시작 시 테이블이 없으면 생성
-# (실무에서는 Alembic 같은 마이그레이션 도구를 쓰지만, 지금은 자동 생성을 사용합니다)
-try:
-    Base.metadata.create_all(bind=engine)
-except OperationalError:
-    print("DB is not ready yet. Waiting...")
+# 서버 시작 시 테이블 자동 생성
+Base.metadata.create_all(bind=engine)
 
-# DB 세션 관리 함수
+# DB 세션 의존성 주입
 def get_db():
     db = SessionLocal()
     try:
@@ -42,17 +41,16 @@ def get_db():
 
 @app.get("/")
 def read_root(db: Session = Depends(get_db)):
-    # 새로운 방문 기록 추가
-    new_visit = Visit(visitor_name="Anonymous Guest")
+    # 방문 기록 저장
+    new_visit = Visit(visitor_name="Guest")
     db.add(new_visit)
     db.commit()
     
-    # 전체 방문 횟수 조회
-    total_count = db.query(Visit).count()
+    # 누적 방문 횟수 계산
+    count = db.query(Visit).count()
     
-    # 비밀 메시지와 방문 횟수를 함께 반환
     return {
         "secret_message": WELCOME_MSG,
-        "total_visits": total_count,
-        "status": "Connected to PostgreSQL"
+        "total_visits": count,
+        "database": "PostgreSQL" if "postgresql" in DB_URL else "SQLite (Test Mode)"
     }
