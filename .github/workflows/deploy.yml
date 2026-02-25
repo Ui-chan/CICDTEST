@@ -5,15 +5,23 @@ on:
     branches: [ "main" ]
 
 jobs:
-  # 1단계: 테스트 및 빌드
+  # 1단계: 테스트 및 도커 이미지 빌드/푸시
   test-and-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
 
-      - name: Run Unit Tests
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
         run: |
           pip install -r requirements.txt
+
+      - name: Run Unit Tests (CI)
+        run: |
           pytest test_main.py
 
       - name: Login to Docker Hub
@@ -29,24 +37,26 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/cicd-test:latest
 
-  # 2단계: EC2에 배포
+  # 2단계: EC2에 접속하여 컨테이너 실행
   deploy:
     needs: test-and-build
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to EC2
+      - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
-          # deploy 단계의 스크립트 수정
           script: |
+            # 기존 컨테이너 중지 및 삭제 (실패해도 계속 진행)
             sudo docker stop fastapi-app || true
             sudo docker rm fastapi-app || true
+            
+            # 최신 이미지 가져오기
             sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/cicd-test:latest
             
-            # -e 옵션으로 환경 변수 전달
+            # 환경 변수를 주입하여 컨테이너 실행
             sudo docker run -d --name fastapi-app \
               -p 8000:8000 \
               -e APP_MESSAGE="${{ secrets.APP_MESSAGE }}" \
