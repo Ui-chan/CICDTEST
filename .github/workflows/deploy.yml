@@ -40,10 +40,14 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
+          # deploy 단계의 스크립트 수정
           script: |
-            # 기존 컨테이너 중지 및 삭제
             sudo docker stop fastapi-app || true
             sudo docker rm fastapi-app || true
-            # 최신 이미지 풀 및 실행
             sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/cicd-test:latest
-            sudo docker run -d --name fastapi-app -p 8000:8000 ${{ secrets.DOCKERHUB_USERNAME }}/cicd-test:latest
+            
+            # -e 옵션으로 환경 변수 전달
+            sudo docker run -d --name fastapi-app \
+              -p 8000:8000 \
+              -e APP_MESSAGE="${{ secrets.APP_MESSAGE }}" \
+              ${{ secrets.DOCKERHUB_USERNAME }}/cicd-test:latest
