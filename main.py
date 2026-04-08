@@ -58,6 +58,6 @@ def read_root(db: Session = Depends(get_db)):
     # 결과를 화면에 보여줍니다.
     return {
         "secret_message": WELCOME_MSG,
-        "total_visits": count,  
+        "total_visits": count,   
         "database_type": "PostgreSQL" if "postgresql" in DB_URL else "SQLite"
     }  
